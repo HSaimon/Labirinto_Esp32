@@ -1,0 +1,86 @@
+#include <Wire.h>
+#include <BluetoothSerial.h> // Biblioteca Bluetooth para ESP32
+
+BluetoothSerial SerialBT; // Instância do Bluetooth
+
+// Configuração dos motores de passo
+int motor1_pins[] = {18, 19, 21, 22}; // Motor 1
+int motor2_pins[] = {25, 26, 27, 14}; // Motor 2
+
+// Configuração do sensor PIR
+int pir_sensor_pin = 15;
+
+// Sequência de passos para os motores de passo
+int sequence[8][4] = {
+    {1, 0, 0, 1},
+    {1, 0, 0, 0},
+    {1, 1, 0, 0},
+    {0, 1, 0, 0},
+    {0, 1, 1, 0},
+    {0, 0, 1, 0},
+    {0, 0, 1, 1},
+    {0, 0, 0, 1}
+};
+
+// Função para mover o motor
+void step_motor(int motor_pins[], int direction, int steps, int delay_ms = 10) {
+    int sequence_size = sizeof(sequence) / sizeof(sequence[0]);
+    for (int i = 0; i < steps; i++) {
+        for (int step = 0; step < sequence_size; step++) {
+            int index = direction == -1 ? sequence_size - step - 1 : step;
+            for (int pin = 0; pin < 4; pin++) {
+                digitalWrite(motor_pins[pin], sequence[index][pin]);
+            }
+            delay(delay_ms);
+        }
+    }
+}
+
+void setup() {
+    // Configurar os pinos dos motores como saída
+    for (int i = 0; i < 4; i++) {
+        pinMode(motor1_pins[i], OUTPUT);
+        pinMode(motor2_pins[i], OUTPUT);
+    }
+
+    // Configurar o sensor PIR
+    pinMode(pir_sensor_pin, INPUT);
+
+    // Inicializar comunicação serial
+    Serial.begin(115200);
+    SerialBT.begin("ESP32_SENSOR_MOTOR"); // Configurar Bluetooth com nome do dispositivo
+    Serial.println("Bluetooth iniciado. Aguardando conexão...");
+}
+
+void loop() {
+    // Verificar conexões Bluetooth
+    if (SerialBT.available()) {
+        String command = SerialBT.readStringUntil('\n');
+        command.trim(); // Remover espaços extras
+        command.toLowerCase(); // Converter para minúsculas
+        Serial.printf("Comando recebido: %s\n", command.c_str());
+
+        // Processar o comando
+        if (command == "cima") {
+            step_motor(motor1_pins, 1, 100);
+        } else if (command == "baixo") {
+            step_motor(motor1_pins, -1, 100);
+        } else if (command == "direita") {
+            step_motor(motor2_pins, 1, 100);
+        } else if (command == "esquerda") {
+            step_motor(motor2_pins, -1, 100);
+        } else {
+            Serial.println("Comando desconhecido.");
+        }
+    }
+
+    // Verificar o sensor PIR (movimento)
+    if (digitalRead(pir_sensor_pin) == HIGH) { // Se o sensor PIR detectar movimento
+        Serial.println("Movimento detectado!");
+        SerialBT.println("fim"); // Envia a mensagem via Bluetooth
+    } else {
+        Serial.println("Sem movimento.");
+    }
+
+    delay(100); // Pequeno atraso para evitar sobrecarga
+}
